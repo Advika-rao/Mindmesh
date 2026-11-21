@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "@xyflow/react/dist/style.css";
+@import "katex/dist/katex.min.css";
+
+@theme {
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+.study-markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.4rem 0;
+  margin: 0.75rem 0;
+}
+
+.study-markdown .katex {
+  color: #e2e8f0;
+  font-size: 1.02em;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #080d1a;
+    color: #e2e8f0;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* React Flow Dark Theme Overrides */
+.react-flow__background {
+  background-color: #070b16;
+}
+
+.react-flow__controls {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.45);
+}
+
+.react-flow__controls-button {
+  background: #0f172a !important;
+  border-bottom: 1px solid #1e293b !important;
+  fill: #94a3b8 !important;
+  color: #94a3b8 !important;
+}
+
+.react-flow__controls-button:hover {
+  background: #1e293b !important;
+  fill: #f8fafc !important;
+  color: #f8fafc !important;
+}
+
+.react-flow__minimap {
+  background: #0b1120 !important;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+/* Custom thin scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}

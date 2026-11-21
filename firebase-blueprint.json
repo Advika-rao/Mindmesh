@@ -1,0 +1,574 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated user profile with isolated personal workspace settings.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 254
+        },
+        "profileImage": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "name", "email", "createdAt", "updatedAt"]
+    },
+    "Note": {
+      "title": "Note",
+      "description": "A personal knowledge note stored in the central knowledge repository with semantic embedding.",
+      "type": "object",
+      "properties": {
+        "noteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50000
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "tags": {
+          "type": "array",
+          "description": "Up to 15 concept tags"
+        },
+        "embedding": {
+          "type": "array",
+          "description": "Semantic embedding vector (up to 768 floats)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["noteId", "userId", "title", "content", "subject", "tags", "embedding", "createdAt", "updatedAt"]
+    },
+    "NoteVersion": {
+      "title": "NoteVersion",
+      "description": "Immutable revision snapshot of a note before an edit.",
+      "type": "object",
+      "properties": {
+        "versionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "noteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "previousContent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50000
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["versionId", "userId", "noteId", "title", "previousContent", "subject", "updatedAt"]
+    },
+    "MindMap": {
+      "title": "MindMap",
+      "description": "AI-generated or edited hierarchical mind map derived from selected notes.",
+      "type": "object",
+      "properties": {
+        "mindMapId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "nodes": {
+          "type": "array",
+          "description": "Up to 100 MindMapNode objects"
+        },
+        "connections": {
+          "type": "array",
+          "description": "Up to 150 connecting branches"
+        },
+        "sourceNoteIds": {
+          "type": "array",
+          "description": "Up to 25 source note IDs"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["mindMapId", "userId", "title", "nodes", "connections", "sourceNoteIds", "createdAt", "updatedAt"]
+    },
+    "KnowledgeGraphNode": {
+      "title": "KnowledgeGraphNode",
+      "description": "Persisted Brain Graph node with layout coordinates and computed relationships.",
+      "type": "object",
+      "properties": {
+        "graphNodeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "noteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "concept": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "positionX": {
+          "type": "number"
+        },
+        "positionY": {
+          "type": "number"
+        },
+        "relationships": {
+          "type": "array",
+          "description": "Up to 50 weighted relationship descriptors"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["graphNodeId", "userId", "noteId", "concept", "subject", "positionX", "positionY", "relationships", "updatedAt"]
+    },
+    "QuizAttempt": {
+      "title": "QuizAttempt",
+      "description": "Completed adaptive quiz attempt with evaluated score and weak topic recommendations.",
+      "type": "object",
+      "properties": {
+        "attemptId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "noteIds": {
+          "type": "array",
+          "description": "Up to 25 source note IDs"
+        },
+        "questions": {
+          "type": "array",
+          "description": "Up to 20 question objects"
+        },
+        "answers": {
+          "type": "array",
+          "description": "Up to 20 evaluated answer objects"
+        },
+        "score": {
+          "type": "number"
+        },
+        "totalQuestions": {
+          "type": "number"
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["easy", "medium", "hard"]
+        },
+        "weakTopics": {
+          "type": "array",
+          "description": "Up to 15 recommended revision topics"
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["attemptId", "userId", "subject", "noteIds", "questions", "answers", "score", "totalQuestions", "difficulty", "weakTopics", "completedAt"]
+    },
+    "AIConversation": {
+      "title": "AIConversation",
+      "description": "Persistent AI Study Assistant conversation thread with source note citations.",
+      "type": "object",
+      "properties": {
+        "conversationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "messages": {
+          "type": "array",
+          "description": "Up to 100 chat messages"
+        },
+        "savedSnippets": {
+          "type": "array",
+          "description": "Up to 50 saved assistant responses"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["conversationId", "userId", "title", "messages", "savedSnippets", "createdAt", "updatedAt"]
+    },
+    "ActivityHistory": {
+      "title": "ActivityHistory",
+      "description": "Chronological record of learning activities, searches, and study interactions.",
+      "type": "object",
+      "properties": {
+        "activityId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "activityType": {
+          "type": "string",
+          "enum": ["note_created", "note_updated", "note_deleted", "note_captured", "ai_chat", "search", "quiz_completed", "mindmap_created", "memory_revived", "connection_explained"]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "entityId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["activityId", "userId", "activityType", "title", "description", "entityId", "timestamp"]
+    },
+    "RevivedMemoryState": {
+      "title": "RevivedMemoryState",
+      "description": "Tracks dismissed or bookmarked revived memory suggestions to prevent repetition.",
+      "type": "object",
+      "properties": {
+        "stateId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sourceNoteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "revivedNoteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["dismissed", "bookmarked"]
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["stateId", "userId", "sourceNoteId", "revivedNoteId", "status", "reason", "updatedAt"]
+    },
+    "SavedExplanation": {
+      "title": "SavedExplanation",
+      "description": "Saved Explain My Connection analysis between two concepts in the Brain Graph.",
+      "type": "object",
+      "properties": {
+        "explanationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sourceNodeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "targetNodeId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sourceTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "targetTitle": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "intermediateConcepts": {
+          "type": "array",
+          "description": "Up to 15 intermediate concepts along the path"
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 10000
+        },
+        "examples": {
+          "type": "array",
+          "description": "Up to 10 practical real-world examples"
+        },
+        "sourceNoteIds": {
+          "type": "array",
+          "description": "Up to 20 supporting note IDs"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["explanationId", "userId", "sourceNodeId", "targetNodeId", "sourceTitle", "targetTitle", "intermediateConcepts", "explanation", "examples", "sourceNoteIds", "createdAt"]
+    },
+    "NoteAttachment": {
+      "title": "NoteAttachment",
+      "description": "Private compressed original image attachment captured via Smart Note Capture and linked to a note.",
+      "type": "object",
+      "properties": {
+        "attachmentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "noteId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fileName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "mimeType": {
+          "type": "string",
+          "enum": ["image/jpeg", "image/png", "image/webp"]
+        },
+        "dataUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 260000
+        },
+        "sizeBytes": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["attachmentId", "userId", "noteId", "fileName", "mimeType", "dataUrl", "sizeBytes", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profile documents restricted strictly to the owning user."
+    },
+    "/notes/{noteId}": {
+      "schema": { "$ref": "#/entities/Note" },
+      "description": "Central repository of user notes and semantic embeddings."
+    },
+    "/noteVersions/{versionId}": {
+      "schema": { "$ref": "#/entities/NoteVersion" },
+      "description": "Immutable revision history snapshots of user notes."
+    },
+    "/noteAttachments/{attachmentId}": {
+      "schema": { "$ref": "#/entities/NoteAttachment" },
+      "description": "Private original images optionally retained from Smart Note Capture."
+    },
+    "/mindMaps/{mindMapId}": {
+      "schema": { "$ref": "#/entities/MindMap" },
+      "description": "Saved interactive hierarchical mind maps."
+    },
+    "/knowledgeGraph/{graphNodeId}": {
+      "schema": { "$ref": "#/entities/KnowledgeGraphNode" },
+      "description": "Persisted Brain Graph nodes, coordinates, and weighted connections."
+    },
+    "/quizAttempts/{attemptId}": {
+      "schema": { "$ref": "#/entities/QuizAttempt" },
+      "description": "Immutable records of completed adaptive quiz attempts and scores."
+    },
+    "/aiConversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/AIConversation" },
+      "description": "AI Study Assistant multi-turn conversation histories and saved snippets."
+    },
+    "/activityHistory/{activityId}": {
+      "schema": { "$ref": "#/entities/ActivityHistory" },
+      "description": "Chronological learning activity and search history log."
+    },
+    "/revivedStates/{stateId}": {
+      "schema": { "$ref": "#/entities/RevivedMemoryState" },
+      "description": "Dismissed or bookmarked Memory Revival suggestions."
+    },
+    "/savedExplanations/{explanationId}": {
+      "schema": { "$ref": "#/entities/SavedExplanation" },
+      "description": "Saved Brain Graph concept connection explanations."
+    }
+  }
+}

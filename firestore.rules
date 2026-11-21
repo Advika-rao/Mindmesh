@@ -1,0 +1,454 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ==================== PRIMITIVES ====================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isVerifiedOwner(uid) {
+      return isVerifiedUser() && request.auth.uid == uid;
+    }
+
+    // Safe single-document get helper: allows existence checks when the document does not exist yet
+    // (returns empty/not-found with zero data leaked) while strictly isolating every existing document to its owner.
+    function isExistingOwnerOrMissing() {
+      return resource == null || existing().userId == request.auth.uid;
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidOptionalString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    // ==================== VALIDATION BLUEPRINTS ====================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['userId', 'name', 'email', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'name', 'email', 'profileImage', 'bio', 'createdAt', 'updatedAt'])
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidString(data.name, 1, 120)
+        && isValidString(data.email, 3, 254)
+        && (!('profileImage' in data) || isValidOptionalString(data.profileImage, 1000))
+        && (!('bio' in data) || isValidOptionalString(data.bio, 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNote(data) {
+      return data.keys().hasAll(['noteId', 'userId', 'title', 'content', 'subject', 'tags', 'embedding', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['noteId', 'userId', 'title', 'content', 'subject', 'tags', 'embedding', 'createdAt', 'updatedAt'])
+        && isValidId(data.noteId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidString(data.title, 1, 200)
+        && isValidString(data.content, 1, 50000)
+        && isValidString(data.subject, 1, 80)
+        && data.tags is list
+        && data.tags.size() <= 15
+        && (data.tags.size() == 0 || isValidString(data.tags[0], 1, 40))
+        && data.embedding is list
+        && data.embedding.size() <= 768
+        && (data.embedding.size() == 0 || data.embedding[0] is number)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNoteVersion(data) {
+      return data.keys().hasAll(['versionId', 'userId', 'noteId', 'title', 'previousContent', 'subject', 'updatedAt'])
+        && data.keys().hasOnly(['versionId', 'userId', 'noteId', 'title', 'previousContent', 'subject', 'updatedAt'])
+        && isValidId(data.versionId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidId(data.noteId)
+        && isValidString(data.title, 1, 200)
+        && isValidString(data.previousContent, 1, 50000)
+        && isValidString(data.subject, 1, 80)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMindMap(data) {
+      return data.keys().hasAll(['mindMapId', 'userId', 'title', 'nodes', 'connections', 'sourceNoteIds', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['mindMapId', 'userId', 'title', 'nodes', 'connections', 'sourceNoteIds', 'createdAt', 'updatedAt'])
+        && isValidId(data.mindMapId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidString(data.title, 1, 200)
+        && data.nodes is list
+        && data.nodes.size() <= 100
+        && (data.nodes.size() == 0 || data.nodes[0] is map)
+        && data.connections is list
+        && data.connections.size() <= 150
+        && (data.connections.size() == 0 || data.connections[0] is map)
+        && data.sourceNoteIds is list
+        && data.sourceNoteIds.size() <= 25
+        && (data.sourceNoteIds.size() == 0 || isValidId(data.sourceNoteIds[0]))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidKnowledgeGraphNode(data) {
+      return data.keys().hasAll(['graphNodeId', 'userId', 'noteId', 'concept', 'subject', 'positionX', 'positionY', 'relationships', 'updatedAt'])
+        && data.keys().hasOnly(['graphNodeId', 'userId', 'noteId', 'concept', 'subject', 'positionX', 'positionY', 'relationships', 'updatedAt'])
+        && isValidId(data.graphNodeId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidId(data.noteId)
+        && isValidString(data.concept, 1, 200)
+        && isValidString(data.subject, 1, 80)
+        && data.positionX is number
+        && data.positionY is number
+        && data.relationships is list
+        && data.relationships.size() <= 50
+        && (data.relationships.size() == 0 || data.relationships[0] is map)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidQuizAttempt(data) {
+      return data.keys().hasAll(['attemptId', 'userId', 'subject', 'noteIds', 'questions', 'answers', 'score', 'totalQuestions', 'difficulty', 'weakTopics', 'completedAt'])
+        && data.keys().hasOnly(['attemptId', 'userId', 'subject', 'noteIds', 'questions', 'answers', 'score', 'totalQuestions', 'difficulty', 'weakTopics', 'completedAt'])
+        && isValidId(data.attemptId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidString(data.subject, 1, 80)
+        && data.noteIds is list
+        && data.noteIds.size() <= 25
+        && (data.noteIds.size() == 0 || isValidId(data.noteIds[0]))
+        && data.questions is list
+        && data.questions.size() >= 1 && data.questions.size() <= 20
+        && data.questions[0] is map
+        && data.answers is list
+        && data.answers.size() <= 20
+        && (data.answers.size() == 0 || data.answers[0] is map)
+        && data.score is number && data.score >= 0 && data.score <= 100
+        && data.totalQuestions is number && data.totalQuestions >= 1 && data.totalQuestions <= 20
+        && data.difficulty in ['easy', 'medium', 'hard']
+        && data.weakTopics is list
+        && data.weakTopics.size() <= 15
+        && (data.weakTopics.size() == 0 || isValidString(data.weakTopics[0], 1, 100))
+        && data.completedAt is timestamp;
+    }
+
+    function isValidAIConversation(data) {
+      return data.keys().hasAll(['conversationId', 'userId', 'title', 'messages', 'savedSnippets', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['conversationId', 'userId', 'title', 'messages', 'savedSnippets', 'createdAt', 'updatedAt'])
+        && isValidId(data.conversationId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidString(data.title, 1, 200)
+        && data.messages is list
+        && data.messages.size() <= 100
+        && (data.messages.size() == 0 || data.messages[0] is map)
+        && data.savedSnippets is list
+        && data.savedSnippets.size() <= 50
+        && (data.savedSnippets.size() == 0 || data.savedSnippets[0] is map)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidActivityHistory(data) {
+      return data.keys().hasAll(['activityId', 'userId', 'activityType', 'title', 'description', 'entityId', 'timestamp'])
+        && data.keys().hasOnly(['activityId', 'userId', 'activityType', 'title', 'description', 'entityId', 'timestamp'])
+        && isValidId(data.activityId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && data.activityType in ['note_created', 'note_updated', 'note_deleted', 'note_captured', 'ai_chat', 'search', 'quiz_completed', 'mindmap_created', 'memory_revived', 'connection_explained']
+        && isValidString(data.title, 1, 200)
+        && isValidString(data.description, 1, 1000)
+        && isValidOptionalString(data.entityId, 128)
+        && data.timestamp is timestamp;
+    }
+
+    function isValidRevivedState(data) {
+      return data.keys().hasAll(['stateId', 'userId', 'sourceNoteId', 'revivedNoteId', 'status', 'reason', 'updatedAt'])
+        && data.keys().hasOnly(['stateId', 'userId', 'sourceNoteId', 'revivedNoteId', 'status', 'reason', 'updatedAt'])
+        && isValidId(data.stateId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidId(data.sourceNoteId)
+        && isValidId(data.revivedNoteId)
+        && data.status in ['dismissed', 'bookmarked']
+        && isValidOptionalString(data.reason, 500)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSavedExplanation(data) {
+      return data.keys().hasAll(['explanationId', 'userId', 'sourceNodeId', 'targetNodeId', 'sourceTitle', 'targetTitle', 'intermediateConcepts', 'explanation', 'examples', 'sourceNoteIds', 'createdAt'])
+        && data.keys().hasOnly(['explanationId', 'userId', 'sourceNodeId', 'targetNodeId', 'sourceTitle', 'targetTitle', 'intermediateConcepts', 'explanation', 'examples', 'sourceNoteIds', 'createdAt'])
+        && isValidId(data.explanationId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidId(data.sourceNodeId)
+        && isValidId(data.targetNodeId)
+        && isValidString(data.sourceTitle, 1, 200)
+        && isValidString(data.targetTitle, 1, 200)
+        && data.intermediateConcepts is list
+        && data.intermediateConcepts.size() <= 15
+        && (data.intermediateConcepts.size() == 0 || isValidString(data.intermediateConcepts[0], 1, 150))
+        && isValidString(data.explanation, 1, 10000)
+        && data.examples is list
+        && data.examples.size() <= 10
+        && (data.examples.size() == 0 || isValidString(data.examples[0], 1, 1000))
+        && data.sourceNoteIds is list
+        && data.sourceNoteIds.size() <= 20
+        && (data.sourceNoteIds.size() == 0 || isValidId(data.sourceNoteIds[0]))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidNoteAttachment(data) {
+      return data.keys().hasAll(['attachmentId', 'userId', 'noteId', 'fileName', 'mimeType', 'dataUrl', 'sizeBytes', 'createdAt'])
+        && data.keys().hasOnly(['attachmentId', 'userId', 'noteId', 'fileName', 'mimeType', 'dataUrl', 'sizeBytes', 'createdAt'])
+        && isValidId(data.attachmentId)
+        && isValidId(data.userId)
+        && data.userId == request.auth.uid
+        && isValidId(data.noteId)
+        && isValidString(data.fileName, 1, 200)
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+        && isValidString(data.dataUrl, 1, 260000)
+        && data.sizeBytes is number && data.sizeBytes > 0 && data.sizeBytes <= 260000
+        && data.createdAt is timestamp;
+    }
+
+    // ==================== COLLECTION RULES ====================
+
+    // 1. Users (PII Strictly Isolated - No list allowed)
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if false;
+      allow create: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedOwner(userId)
+        && isValidId(userId)
+        && isValidUser(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'profileImage', 'bio', 'updatedAt']);
+      allow delete: if isVerifiedOwner(userId) && isValidId(userId);
+    }
+
+    // 2. Notes (Central Knowledge Repository)
+    match /notes/{noteId} {
+      allow get: if isSignedIn() && isValidId(noteId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(noteId)
+        && isValidNote(incoming())
+        && incoming().noteId == noteId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(noteId)
+        && isValidNote(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().noteId == existing().noteId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'subject', 'tags', 'embedding', 'updatedAt'])
+          || incoming().diff(existing()).affectedKeys().hasOnly(['embedding', 'updatedAt'])
+        );
+      allow delete: if isVerifiedUser() && isValidId(noteId) && existing().userId == request.auth.uid;
+    }
+
+    // 3. NoteVersions (Immutable revision snapshots with parent existence check)
+    match /noteVersions/{versionId} {
+      allow get: if isSignedIn() && isValidId(versionId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(versionId)
+        && isValidNoteVersion(incoming())
+        && incoming().versionId == versionId
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/notes/$(incoming().noteId))
+        && get(/databases/$(database)/documents/notes/$(incoming().noteId)).data.userId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(versionId) && existing().userId == request.auth.uid;
+    }
+
+    // 4. MindMaps
+    match /mindMaps/{mindMapId} {
+      allow get: if isSignedIn() && isValidId(mindMapId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(mindMapId)
+        && isValidMindMap(incoming())
+        && incoming().mindMapId == mindMapId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(mindMapId)
+        && isValidMindMap(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().mindMapId == existing().mindMapId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'nodes', 'connections', 'updatedAt']);
+      allow delete: if isVerifiedUser() && isValidId(mindMapId) && existing().userId == request.auth.uid;
+    }
+
+    // 5. KnowledgeGraph (Persisted Brain Graph nodes & relationships)
+    match /knowledgeGraph/{graphNodeId} {
+      allow get: if isSignedIn() && isValidId(graphNodeId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(graphNodeId)
+        && isValidKnowledgeGraphNode(incoming())
+        && incoming().graphNodeId == graphNodeId
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/notes/$(incoming().noteId))
+        && get(/databases/$(database)/documents/notes/$(incoming().noteId)).data.userId == request.auth.uid;
+      allow update: if isVerifiedUser()
+        && isValidId(graphNodeId)
+        && isValidKnowledgeGraphNode(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().graphNodeId == existing().graphNodeId
+        && incoming().noteId == existing().noteId
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['positionX', 'positionY', 'updatedAt'])
+          || incoming().diff(existing()).affectedKeys().hasOnly(['concept', 'subject', 'relationships', 'updatedAt'])
+          || incoming().diff(existing()).affectedKeys().hasOnly(['concept', 'subject', 'positionX', 'positionY', 'relationships', 'updatedAt'])
+        );
+      allow delete: if isVerifiedUser() && isValidId(graphNodeId) && existing().userId == request.auth.uid;
+    }
+
+    // 6. QuizAttempts (Immutable terminal quiz records)
+    match /quizAttempts/{attemptId} {
+      allow get: if isSignedIn() && isValidId(attemptId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(attemptId)
+        && isValidQuizAttempt(incoming())
+        && incoming().attemptId == attemptId
+        && incoming().completedAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(attemptId) && existing().userId == request.auth.uid;
+    }
+
+    // 7. AIConversations
+    match /aiConversations/{conversationId} {
+      allow get: if isSignedIn() && isValidId(conversationId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(conversationId)
+        && isValidAIConversation(incoming())
+        && incoming().conversationId == conversationId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(conversationId)
+        && isValidAIConversation(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().conversationId == existing().conversationId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'messages', 'updatedAt'])
+          || incoming().diff(existing()).affectedKeys().hasOnly(['savedSnippets', 'updatedAt'])
+          || incoming().diff(existing()).affectedKeys().hasOnly(['title', 'messages', 'savedSnippets', 'updatedAt'])
+        );
+      allow delete: if isVerifiedUser() && isValidId(conversationId) && existing().userId == request.auth.uid;
+    }
+
+    // 8. ActivityHistory (Immutable chronological log)
+    match /activityHistory/{activityId} {
+      allow get: if isSignedIn() && isValidId(activityId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(activityId)
+        && isValidActivityHistory(incoming())
+        && incoming().activityId == activityId
+        && incoming().timestamp == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(activityId) && existing().userId == request.auth.uid;
+    }
+
+    // 9. RevivedStates (Dismissed / bookmarked suggestions)
+    match /revivedStates/{stateId} {
+      allow get: if isSignedIn() && isValidId(stateId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(stateId)
+        && isValidRevivedState(incoming())
+        && incoming().stateId == stateId
+        && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser()
+        && isValidId(stateId)
+        && isValidRevivedState(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().stateId == existing().stateId
+        && incoming().sourceNoteId == existing().sourceNoteId
+        && incoming().revivedNoteId == existing().revivedNoteId
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reason', 'updatedAt']);
+      allow delete: if isVerifiedUser() && isValidId(stateId) && existing().userId == request.auth.uid;
+    }
+
+    // 10. SavedExplanations (Immutable saved connection analyses)
+    match /savedExplanations/{explanationId} {
+      allow get: if isSignedIn() && isValidId(explanationId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(explanationId)
+        && isValidSavedExplanation(incoming())
+        && incoming().explanationId == explanationId
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(explanationId) && existing().userId == request.auth.uid;
+    }
+
+    // 11. NoteAttachments (Private original images retained from Smart Note Capture)
+    match /noteAttachments/{attachmentId} {
+      allow get: if isSignedIn() && isValidId(attachmentId) && isExistingOwnerOrMissing();
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isVerifiedUser()
+        && isValidId(attachmentId)
+        && isValidNoteAttachment(incoming())
+        && incoming().attachmentId == attachmentId
+        && incoming().createdAt == request.time
+        && exists(/databases/$(database)/documents/notes/$(incoming().noteId))
+        && get(/databases/$(database)/documents/notes/$(incoming().noteId)).data.userId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(attachmentId) && existing().userId == request.auth.uid;
+    }
+  }
+}
