@@ -18,14 +18,40 @@ const IS_PRODUCTION =
     process.argv[1]?.endsWith('server.ts') &&
     !process.env.npm_lifecycle_event?.includes('dev'));
 const PORT = IS_PRODUCTION ? Number(process.env.PORT) || 3000 : 3000;
-const TEXT_MODEL = 'gemini-4-hydrogen';
-const FAST_VISION_MODEL = 'gemini-3.1-flash-lite';
-const EMBEDDING_MODEL = 'gemini-embedding-2';
+const TEXT_MODEL = (process.env.GEMINI_TEXT_MODEL || '').trim() || 'gemini-4-hydrogen';
+const FAST_VISION_MODEL = (process.env.GEMINI_VISION_MODEL || '').trim() || 'gemini-3.1-flash-lite';
+const EMBEDDING_MODEL = (process.env.GEMINI_EMBEDDING_MODEL || '').trim() || 'gemini-embedding-2';
+
+function sanitizeEnvSecret(rawValue: string | undefined): string {
+  if (!rawValue) return '';
+  let cleaned = rawValue.trim();
+  // Strip accidental surrounding quotes (e.g. copied from .env files into Render Environment Variables)
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  return cleaned;
+}
+
+function resolveGeminiApiKey(): string {
+  const candidates = [process.env.GEMINI_API_KEY, process.env.GOOGLE_API_KEY];
+  for (const candidate of candidates) {
+    const cleaned = sanitizeEnvSecret(candidate);
+    if (cleaned && cleaned !== 'MY_GEMINI_API_KEY') {
+      return cleaned;
+    }
+  }
+  return '';
+}
 
 function getAIClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-    throw new Error('GEMINI_API_KEY is not configured on the server. Please configure your Gemini API key in Settings > Secrets.');
+  const apiKey = resolveGeminiApiKey();
+  if (!apiKey) {
+    throw new Error(
+      'MISSING_GEMINI_API_KEY: Server environment variable GEMINI_API_KEY is not configured.'
+    );
   }
   return new GoogleGenAI({
     apiKey,
@@ -587,11 +613,18 @@ async function generateCaptureWithFallback(
       const nextUsesDifferentModel = Boolean(nextCandidate && nextCandidate.model !== candidate.model);
 
       // If quota is exhausted on the current model, never retry the exact same model again
+      const isModelPermissionDenied =
+        (msg.includes('PERMISSION_DENIED') || msg.includes('403')) &&
+        !msg.includes('API_KEY_INVALID') &&
+        !msg.includes('API key not valid') &&
+        !msg.includes('MISSING_GEMINI_API_KEY');
+
       const shouldFallback =
         !signal?.aborted &&
         i < candidates.length - 1 &&
         (!quotaExhausted || nextUsesDifferentModel) &&
         (isAttemptTimeout ||
+          (isModelPermissionDenied && nextUsesDifferentModel) ||
           msg.includes('503') ||
           msg.includes('502') ||
           msg.includes('UNAVAILABLE') ||
@@ -689,20 +722,37 @@ function handleAIError(res: Response, error: unknown, context: string): void {
     });
     return;
   }
+  if (rawMessage.includes('MISSING_GEMINI_API_KEY')) {
+    res.status(503).json({
+      error:
+        'Server configuration error: GEMINI_API_KEY is not set in the server environment variables.',
+      code: 'MISSING_API_KEY',
+    });
+    return;
+  }
   if (
-    rawMessage.includes('PERMISSION_DENIED') ||
     rawMessage.includes('API_KEY_INVALID') ||
-    rawMessage.includes('GEMINI_API_KEY')
+    rawMessage.toLowerCase().includes('api key not valid')
   ) {
     res.status(403).json({
-      error: 'AI API key is missing or invalid. Please check your configuration in Settings > Secrets.',
-      code: 'API_KEY_ERROR',
+      error:
+        'The server GEMINI_API_KEY was rejected by the Gemini API. Verify the key value in your hosting environment variables (no extra spaces or quotes).',
+      code: 'API_KEY_INVALID',
+    });
+    return;
+  }
+  if (rawMessage.includes('PERMISSION_DENIED')) {
+    res.status(403).json({
+      error:
+        'Gemini API access was denied for the configured server key. Verify that the Generative Language API is enabled and that the key has no browser referrer restrictions.',
+      code: 'PERMISSION_DENIED',
     });
     return;
   }
   if (isQuotaExhaustedError(error)) {
     res.status(429).json({
-      error: 'Your API quota has been exhausted. Please wait for your quota to reset or review your API key plan in Settings > Secrets.',
+      error:
+        'Your Gemini API quota has been exhausted. Please wait for your quota to reset or check your Gemini API plan.',
       code: 'QUOTA_EXHAUSTED',
       isQuotaExhausted: true,
     });
@@ -783,7 +833,11 @@ async function createServer(): Promise<void> {
   });
 
   app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', service: 'MindMesh API' });
+    res.json({
+      status: 'ok',
+      service: 'MindMesh API',
+      aiConfigured: Boolean(resolveGeminiApiKey()),
+    });
   });
 
   // 1. Semantic Embedding Endpoint (Feature 1, 4, 6 — cached & coalesced)
@@ -3101,10 +3155,32 @@ Output ONLY the exact verbatim visible text from Page ${safePageNum} of ${safeTo
         });
         return;
       }
-      if (rawMessage.includes('PERMISSION_DENIED') || rawMessage.includes('API_KEY_INVALID') || rawMessage.includes('GEMINI_API_KEY')) {
+      if (rawMessage.includes('MISSING_GEMINI_API_KEY')) {
+        res.status(503).json({
+          error:
+            'Server configuration error: GEMINI_API_KEY is not set in the server environment variables.',
+          code: 'MISSING_API_KEY',
+          debug: debugContext,
+        });
+        return;
+      }
+      if (
+        rawMessage.includes('API_KEY_INVALID') ||
+        rawMessage.toLowerCase().includes('api key not valid')
+      ) {
         res.status(403).json({
-          error: 'API error: Gemini API key is missing or invalid. Check Settings > Secrets.',
-          code: 'API_KEY_ERROR',
+          error:
+            'The server GEMINI_API_KEY was rejected by the Gemini API. Verify the key value in your hosting environment variables (no extra spaces or quotes).',
+          code: 'API_KEY_INVALID',
+          debug: debugContext,
+        });
+        return;
+      }
+      if (rawMessage.includes('PERMISSION_DENIED')) {
+        res.status(403).json({
+          error:
+            'Gemini API access was denied for the configured server key. Verify that the Generative Language API is enabled and that the key has no browser referrer restrictions.',
+          code: 'PERMISSION_DENIED',
           debug: debugContext,
         });
         return;
@@ -3254,7 +3330,9 @@ Output ONLY the exact verbatim visible text from Page ${safePageNum} of ${safeTo
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`MindMesh server listening on http://0.0.0.0:${PORT}`);
+    console.log(
+      `MindMesh server listening on http://0.0.0.0:${PORT} (GEMINI_API_KEY configured: ${Boolean(resolveGeminiApiKey())})`
+    );
   });
 }
 

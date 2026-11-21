@@ -97,8 +97,22 @@ function toFriendlyErrorMessage(
   ) {
     return 'We received an incomplete response from the AI service. Please try again.';
   }
-  if (status === 403 || serverCode === 'API_KEY_ERROR') {
-    return 'The AI service could not authenticate. Please verify your API key in Settings > Secrets.';
+  if (
+    status === 403 ||
+    serverCode === 'API_KEY_ERROR' ||
+    serverCode === 'API_KEY_INVALID' ||
+    serverCode === 'PERMISSION_DENIED' ||
+    serverCode === 'MISSING_API_KEY'
+  ) {
+    const cleanedServerMsg = (serverMessage || '').trim();
+    if (
+      cleanedServerMsg &&
+      cleanedServerMsg.length <= 260 &&
+      !/<!doctype|<html|\bstack\b|\btrace\b|^\s*[\[{]/i.test(cleanedServerMsg)
+    ) {
+      return cleanedServerMsg;
+    }
+    return 'The backend AI service could not authenticate with Gemini. Check the server GEMINI_API_KEY environment variable.';
   }
   // Never expose raw HTML, stack traces, or technical JSON strings to the user
   const cleaned = (serverMessage || '').trim();
@@ -383,6 +397,18 @@ export function parseCapturePageResponse(input: ParseCaptureResponseInput): Page
  * with the Node.js/Express backend (/api/ai/*), keeping Gemini credentials server-side.
  */
 export class ServerAIProvider implements AIProvider {
+  private resolveEndpoint(endpoint: string): string {
+    if (/^https?:\/\//i.test(endpoint)) return endpoint;
+    const rawBase =
+      typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      typeof import.meta.env.VITE_API_BASE_URL === 'string'
+        ? import.meta.env.VITE_API_BASE_URL.trim().replace(/\/+$/, '')
+        : '';
+    if (!rawBase) return endpoint;
+    return `${rawBase}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  }
+
   private async fetchWithTimeout(
     endpoint: string,
     body: unknown,
@@ -407,7 +433,7 @@ export class ServerAIProvider implements AIProvider {
     }, timeoutMs);
 
     try {
-      return await fetch(endpoint, {
+      return await fetch(this.resolveEndpoint(endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
