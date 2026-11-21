@@ -9,7 +9,15 @@ import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = process.env.NODE_ENV === 'production' ? Number(process.env.PORT) || 3000 : 3000;
+const distPath = path.resolve(__dirname, 'dist');
+const IS_PRODUCTION =
+  process.env.NODE_ENV === 'production' ||
+  Boolean(process.env.RENDER) ||
+  (fs.existsSync(distPath) &&
+    process.env.VITE_DEV !== 'true' &&
+    process.argv[1]?.endsWith('server.ts') &&
+    !process.env.npm_lifecycle_event?.includes('dev'));
+const PORT = IS_PRODUCTION ? Number(process.env.PORT) || 3000 : 3000;
 const TEXT_MODEL = 'gemini-4-hydrogen';
 const FAST_VISION_MODEL = 'gemini-3.1-flash-lite';
 const EMBEDDING_MODEL = 'gemini-embedding-2';
@@ -3228,10 +3236,7 @@ Output ONLY the exact verbatim visible text from Page ${safePageNum} of ${safeTo
   });
 
   // Frontend Vite Dev Middleware or Production Static Files
-  const distPath = path.resolve(__dirname, 'dist');
-  const isProduction = process.env.NODE_ENV === 'production' || (fs.existsSync(distPath) && process.env.VITE_DEV !== 'true' && process.argv[1]?.endsWith('server.ts') && !process.env.npm_lifecycle_event?.includes('dev'));
-
-  if (!isProduction) {
+  if (!IS_PRODUCTION) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
